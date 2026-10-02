@@ -1,0 +1,43 @@
+{"ts": "2026-10-02T05:59:28Z", "level": "INFO", "message": "startup env=development config_hash=e4849c86555121cfe46ff1f6981f0203c30eadf43fca40c524d798dfde2245c1 dataset=full-real", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T05:59:36Z", "level": "ERROR", "message": "unhandled request_id=63ab9734bf974075bd3ec6fc01a1dcd2 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T05:59:49Z", "level": "ERROR", "message": "unhandled request_id=7f9882df0461484e80eb61a41e0ee9b8 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T05:59:57Z", "level": "ERROR", "message": "unhandled request_id=7f6089c928424475a4b5193fb40d282c path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:00:00Z", "level": "ERROR", "message": "unhandled request_id=7a90d26d55b149e4817def9fb3a4e538 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:00:49Z", "level": "ERROR", "message": "unhandled request_id=8f615b249ba04a4699113170831f32a6 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:00:51Z", "level": "ERROR", "message": "unhandled request_id=879fc89fa0e4443789ff378d2bf4c75a path=/api/trace/KKBK10000000", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:00:52Z", "level": "ERROR", "message": "unhandled request_id=4621da0b7c334eca87376019ac177acd path=/api/trace/KKBK10000000", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:00:52Z", "level": "ERROR", "message": "unhandled request_id=9b0174ce2a4b4e0fb215ebd5f1a55701 path=/api/trace/KKBK10000000", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:31Z", "level": "ERROR", "message": "unhandled request_id=e55f559eea044caa9821d1cc8311ad0c path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:34Z", "level": "ERROR", "message": "unhandled request_id=a48ec6ac1a714b90be863c48dfaf1c6c path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:36Z", "level": "ERROR", "message": "unhandled request_id=34ffb20b821e46e8a03aa963ca89c272 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:36Z", "level": "ERROR", "message": "unhandled request_id=4a206fb7afee437899342e47cc21a7b2 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:37Z", "level": "ERROR", "message": "unhandled request_id=076f2c39739b48929daa3f2e5dc4a8f8 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:37Z", "level": "ERROR", "message": "unhandled request_id=79a581a8bc0e41bea5e20858cce962a5 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:37Z", "level": "ERROR", "message": "unhandled request_id=87c6e45c02b74992ae03908c89b96066 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:38Z", "level": "ERROR", "message": "unhandled request_id=e2ec07dc61ab4052937a6dd92d033850 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:38Z", "level": "ERROR", "message": "unhandled request_id=cff8418c95774a16a8beaedbbc4136ad path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:39Z", "level": "ERROR", "message": "unhandled request_id=18cf049e645c4046b5c3b853f051c4ea path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:02:39Z", "level": "ERROR", "message": "unhandled request_id=076798a4ea46401080381788337807a8 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:03:06Z", "level": "ERROR", "message": "unhandled request_id=4fbace8c52db4ce287015c19f7add6f7 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:06:28Z", "level": "ERROR", "message": "unhandled request_id=ab125e24887546bba63ed050d0303081 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:06:37Z", "level": "ERROR", "message": "unhandled request_id=f5ae5194a2924cf88a6b89915f1e1114 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:11:19Z", "level": "INFO", "message": "startup env=development config_hash=e4849c86555121cfe46ff1f6981f0203c30eadf43fca40c524d798dfde2245c1 dataset=full-real", "logger": "abhedya", "pid": 13124}
+{"ts": "2026-10-02T06:11:19Z", "level": "INFO", "message": "shutdown", "logger": "abhedya", "pid": 13124}
+{"ts": "2026-10-02T06:19:45Z", "level": "ERROR", "message": "unhandled request_id=8d7487eb6cf34330be9aa0752d63bb95 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:19:55Z", "level": "ERROR", "message": "unhandled request_id=0ff58402d65448ba9560b3c44a3a31c3 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:19:56Z", "level": "ERROR", "message": "unhandled request_id=49d18e4c743c42c4839527d5727e032b path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:19:57Z", "level": "ERROR", "message": "unhandled request_id=c9c10e56c5d74bed84f91b52e98f0aa9 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:19:58Z", "level": "ERROR", "message": "unhandled request_id=adbf18aeb2b44dc8a019e56724330c23 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:19:58Z", "level": "ERROR", "message": "unhandled request_id=09c22a2a6eac466096bd54a406644b6b path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:19:58Z", "level": "ERROR", "message": "Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)\nhandle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>", "logger": "asyncio", "pid": 27540}
+{"ts": "2026-10-02T06:19:59Z", "level": "ERROR", "message": "unhandled request_id=5bfa5877caa849b6a7633ed855c044a3 path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:20:41Z", "level": "INFO", "message": "startup env=development config_hash=e4849c86555121cfe46ff1f6981f0203c30eadf43fca40c524d798dfde2245c1 dataset=None", "logger": "abhedya", "pid": 15344}
+{"ts": "2026-10-02T06:20:41Z", "level": "INFO", "message": "shutdown", "logger": "abhedya", "pid": 15344}
+{"ts": "2026-10-02T06:20:57Z", "level": "ERROR", "message": "unhandled request_id=22206566ba2b41a0b01cd7ad959e757e path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:25:42Z", "level": "INFO", "message": "startup env=development config_hash=e4849c86555121cfe46ff1f6981f0203c30eadf43fca40c524d798dfde2245c1 dataset=default", "logger": "abhedya", "pid": 16048}
+{"ts": "2026-10-02T06:27:12Z", "level": "INFO", "message": "trace request_id=124015dc20bc45d287ad3c6e3adb177e victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 16048}
+{"ts": "2026-10-02T06:27:12Z", "level": "ERROR", "message": "unhandled request_id=33fb88b2f1ae467e924c105ff5b574ed path=/api/metrics", "logger": "abhedya", "pid": 27540}
+{"ts": "2026-10-02T06:32:25Z", "level": "INFO", "message": "trace request_id=14043921d1854089bb80d2a13343d6a4 victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 16048}
+{"ts": "2026-10-02T06:32:45Z", "level": "INFO", "message": "trace request_id=5697c22f16044b0a8a24da97357c31b8 victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 16048}
+{"ts": "2026-10-02T06:35:52Z", "level": "INFO", "message": "trace request_id=3c84663253e14eb393ed0dba8d9ffd4b victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 16048}
+{"ts": "2026-10-02T06:38:56Z", "level": "INFO", "message": "trace request_id=bd119630be944211b1478acc72334cdb victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 16048}

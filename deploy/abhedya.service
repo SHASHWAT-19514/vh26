@@ -1,0 +1,24 @@
+[Unit]
+Description=Abhedya-Chakra offline analytics API
+After=local-fs.target
+
+[Service]
+Type=simple
+User=abhedya
+Group=abhedya
+WorkingDirectory=/opt/abhedya
+EnvironmentFile=/etc/abhedya/abhedya.env
+ExecStart=/opt/abhedya/.venv/bin/python -m abhedya serve --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=180
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/abhedya/data /var/log/abhedya
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

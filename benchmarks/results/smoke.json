@@ -1,0 +1,8 @@
+{
+  "rows": 10000,
+  "ingest_s": 18.501,
+  "analytics_s": 2.783,
+  "trace_p50_ms": 1703.46,
+  "trace_max_ms": 1712.23,
+  "pass_trace_lt_2000": true
+}

@@ -1,0 +1,13 @@
+{
+  "dataset_id": "full-real",
+  "raw_rows": 2000000,
+  "rows": 1997748,
+  "rejected": 2252,
+  "valid_before_dedup": 2000000,
+  "sha256": "2c9f81fd34f728c0b7c1e803cb49e1e231c1d9204a77badfcb737f50adf73101",
+  "elapsed_s": 13.161,
+  "accounts": 24873,
+  "wall_s": 13.174,
+  "cpu": "x86_64",
+  "ram_gb": 19.72
+}

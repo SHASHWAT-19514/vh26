@@ -1,0 +1,11 @@
+window_minutes: 15
+min_delay_minutes: 0
+passthrough_frac: 0.90
+min_out_receivers: 2
+fan_in_window_h: 24
+fan_out_window_min: 15
+flag_threshold: 60
+theta_edge: 0.5
+tau_trace: 50
+foreign_ip_prefixes: ["185.", "194."]
+headless_devices: ["Web_Emulator", "Linux_Script"]

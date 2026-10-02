@@ -1,0 +1,8 @@
+{
+  "nodes": 82,
+  "edges": 87,
+  "trace_ms": 340.65,
+  "wall_s": 0.355,
+  "rss_mb": 107.8,
+  "warm": true
+}
