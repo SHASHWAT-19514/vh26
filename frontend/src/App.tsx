@@ -494,6 +494,24 @@ function AccountSearch() {
   );
 }
 
+function traceSubgraph(trace: Trace, root: string) {
+  const nodeIds = new Set([root]);
+  const edges = new Set<Edge>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    trace.edges.forEach((edge) => {
+      if (!edges.has(edge) && (nodeIds.has(edge.from) || nodeIds.has(edge.to))) {
+        edges.add(edge);
+        nodeIds.add(edge.from);
+        nodeIds.add(edge.to);
+        changed = true;
+      }
+    });
+  }
+  return { nodes: trace.nodes.filter((node) => nodeIds.has(node.id)), edges: [...edges] };
+}
+
 function TraceView() {
   const {
     apiKey,
@@ -513,9 +531,19 @@ function TraceView() {
   const [caseModalOpen, setCaseModalOpen] = useState(false);
   const [caseName, setCaseName] = useState('');
   const [activeLayerFilter, setActiveLayerFilter] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<any>(null);
 
   const graphRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core>();
+
+  useEffect(() => {
+    if (!selectedNode?.id) { setSelectedAccount(null); return; }
+    let current = true;
+    api(`/api/account/${encodeURIComponent(selectedNode.id)}`, {}, apiKey)
+      .then((detail) => { if (current) setSelectedAccount(detail); })
+      .catch(() => { if (current) setSelectedAccount(null); });
+    return () => { current = false; };
+  }, [selectedNode?.id, apiKey]);
 
   async function runTrace() {
     if (!isValidAccount(victim)) {
@@ -552,17 +580,9 @@ function TraceView() {
     let displayEdges = trace.edges;
 
     if (isolatedNode) {
-      // Find all connected edges and nodes within 1 hop of isolated node
-      const connectedEdges = trace.edges.filter(
-        (e) => e.from === isolatedNode || e.to === isolatedNode
-      );
-      const connectedNodeIds = new Set<string>([isolatedNode]);
-      connectedEdges.forEach((e) => {
-        connectedNodeIds.add(e.from);
-        connectedNodeIds.add(e.to);
-      });
-      displayNodes = trace.nodes.filter((n) => connectedNodeIds.has(n.id));
-      displayEdges = connectedEdges;
+      const subgraph = traceSubgraph(trace, isolatedNode);
+      displayNodes = subgraph.nodes;
+      displayEdges = subgraph.edges;
     } else if (activeLayerFilter) {
       displayNodes = trace.nodes.filter((n) => n.layer === activeLayerFilter || n.layer === 'VICTIM');
       const nodeIds = new Set(displayNodes.map((n) => n.id));
@@ -1018,10 +1038,36 @@ function TraceView() {
 
                       <div style={{ fontSize: '12px', lineHeight: '1.6' }}>
                         <div><b>Role:</b> {selectedNode.role || 'Unclassified'}</div>
+                        <div><b>Likely layer:</b> {selectedAccount?.detection?.role_label || selectedNode.layer}</div>
                         <div><b>Bank:</b> {selectedNode.bank || '—'}</div>
                         <div><b>IFSC:</b> {selectedNode.ifsc || '—'}</div>
                         <div><b>Hop Depth:</b> {selectedNode.hop}</div>
                       </div>
+
+                      {selectedAccount && (
+                        <div style={{ marginTop: '12px', fontSize: '11px', lineHeight: '1.6' }}>
+                          <b>Explainable risk breakdown</b>
+                          {[
+                            ['Velocity', 'velocity_score', 25], ['Fan-in', 'fan_in_score', 15],
+                            ['Fan-out', 'fan_out_score', 15], ['Layering', 'layering_score', 15],
+                            ['Terminal', 'terminal_score', 10], ['Cycle', 'cycle_score', 10],
+                            ['Behaviour', 'behaviour_score', 10],
+                          ].map(([label, key, weight]) => (
+                            <div key={key as string} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>{label}</span><b>{selectedAccount.risk_breakdown?.[key as string] ?? 0}/{weight}</b>
+                            </div>
+                          ))}
+                          <div style={{ marginTop: '8px' }}><b>Velocity</b>: 3m {((selectedAccount.risk_breakdown?.three_minute_pass_through_ratio || 0) * 100).toFixed(1)}%, 15m {((selectedAccount.risk_breakdown?.fifteen_minute_pass_through_ratio || 0) * 100).toFixed(1)}%; median delay {selectedAccount.risk_breakdown?.median_pass_through_delay_seconds || 0}s</div>
+                          <div><b>Fan-in:</b> {selectedAccount.unique_senders} senders · {selectedAccount.incoming_count} transfers</div>
+                          <div><b>Fan-out:</b> {selectedAccount.unique_receivers} receivers · {selectedAccount.outgoing_count} transfers</div>
+                          <div><b>Detection reasons</b></div>
+                          {(selectedAccount.detection?.reasons || []).map((reason: string) => <div key={reason}>• {reason}</div>)}
+                          <div><b>Collector evidence IDs:</b> {(selectedAccount.detection?.collector_evidence?.transaction_ids || []).join(', ') || '—'}</div>
+                          <div><b>Velocity evidence IDs:</b> {(selectedAccount.risk_breakdown?.velocity_transaction_ids || []).join(', ') || '—'}</div>
+                          <div><b>Terminal raw evidence:</b> {JSON.stringify(selectedAccount.risk_breakdown?.terminal_evidence || [])}</div>
+                          <div><b>Cycle evidence:</b> {JSON.stringify(selectedAccount.risk_breakdown?.cycle_evidence || [])}</div>
+                        </div>
+                      )}
 
                       {/* One-click Subgraph Isolation */}
                       <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1031,6 +1077,27 @@ function TraceView() {
                           onClick={() => set({ isolatedNode: selectedNode.id })}
                         >
                           🔍 Isolate Connected Syndicate
+                        </button>
+                        <button
+                          className="secondary"
+                          style={{ padding: '6px 12px', fontSize: '12px' }}
+                          onClick={() => {
+                            const subgraph = traceSubgraph(trace!, selectedNode.id);
+                            const blob = new Blob([JSON.stringify({
+                              root_account: selectedNode.id,
+                              nodes: subgraph.nodes,
+                              edges: subgraph.edges,
+                              flow_links: trace!.flow_links.filter((link: any) => subgraph.edges.some((edge) => edge.id === link.target)),
+                            }, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const anchor = document.createElement('a');
+                            anchor.href = url;
+                            anchor.download = `subgraph-${selectedNode.id}.json`;
+                            anchor.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          Export Connected Evidence JSON
                         </button>
                       </div>
                     </>
@@ -1576,9 +1643,9 @@ function Benchmarks() {
     <>
       <div className="intro">
         <div>
-          <small>MEASURED PERFORMANCE TARGETS</small>
+          <small>BENCHMARK ARTIFACTS</small>
           <h2>System Benchmarks</h2>
-          <p>Real verified measurements against the 2,000,000 transaction dataset. No fabricated metrics.</p>
+          <p>Values appear only when a local benchmark result has been saved.</p>
         </div>
       </div>
 
@@ -1586,17 +1653,17 @@ function Benchmarks() {
         <div className="stat">
           <small>2M INGESTION TARGET</small>
           <b>≤ 60.0 s</b>
-          <span>Measured: 13.17 s</span>
+          <span>Measured: {data['ingestion_latest.json']?.ingestion_seconds != null ? `${data['ingestion_latest.json'].ingestion_seconds} s` : 'Not measured'}</span>
         </div>
         <div className="stat">
           <small>4-HOP TRACE TARGET</small>
           <b>≤ 2.0 s</b>
-          <span>Measured: 0.35 s</span>
+          <span>Measured: {data['trace_latest.json']?.average_ms != null ? `${data['trace_latest.json'].average_ms} ms average` : 'Not measured'}</span>
         </div>
         <div className="stat">
           <small>PEAK RAM CONSUMPTION</small>
           <b>≤ 16 GB</b>
-          <span>Measured: 108 MB</span>
+          <span>Measured: {data['ingestion_latest.json']?.peak_rss_mb != null ? `${data['ingestion_latest.json'].peak_rss_mb} MB` : 'Not measured'}</span>
         </div>
       </div>
 

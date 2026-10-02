@@ -9,3 +9,11 @@ theta_edge: 0.5
 tau_trace: 50
 foreign_ip_prefixes: ["185.", "194."]
 headless_devices: ["Web_Emulator", "Linux_Script"]
+risk_weights:
+  velocity: 25
+  fan_in: 15
+  fan_out: 15
+  layering: 15
+  terminal: 10
+  cycle: 10
+  behaviour: 10

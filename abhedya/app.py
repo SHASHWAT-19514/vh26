@@ -115,7 +115,8 @@ def account_detail(account_id: str):
     con=duckdb.connect(str(DATA_DIR/'datasets'/app.state.dataset/'abhedya.duckdb'),read_only=True); r=con.execute('SELECT a.*,s.score,s.role,s.tier,s.components,s.reasons FROM accounts a LEFT JOIN risk_scores s ON a.account_id=s.account_id WHERE a.account_number=?',(account_id,)).fetchone()
     if not r: con.close(); raise HTTPException(404,'ACCOUNT_NOT_FOUND')
     tx=con.execute('SELECT txn_id,sender_acct,receiver_acct,amount_paise,ts,sender_ifsc,receiver_ifsc,mode,narration,ip,device FROM transactions WHERE sender_acct=? OR receiver_acct=? ORDER BY ts DESC LIMIT 200',(account_id,account_id)).fetchall(); con.close()
-    return {'account':account_id,'incoming_count':r[6],'outgoing_count':r[7],'incoming_amount':r[8],'outgoing_amount':r[9],'unique_senders':r[10],'unique_receivers':r[11],'risk':r[12] or 0,'role':r[13] or 'none','tier':r[14] or 'Low','transactions':[{'transaction_id':x[0],'sender':x[1],'receiver':x[2],'amount_paise':x[3],'timestamp':str(x[4]),'sender_ifsc':x[5],'receiver_ifsc':x[6],'payment_mode':x[7],'narration':x[8],'ip':x[9],'device':x[10]} for x in tx]}
+    components=json.loads(r[15] or '{}'); detection=json.loads(r[16] or '{}')
+    return {'account':account_id,'incoming_count':r[6],'outgoing_count':r[7],'incoming_amount':r[8],'outgoing_amount':r[9],'unique_senders':r[10],'unique_receivers':r[11],'risk':r[12] or 0,'role':r[13] or 'none','tier':r[14] or 'Low','risk_breakdown':components,'detection':detection,'transactions':[{'transaction_id':x[0],'sender':x[1],'receiver':x[2],'amount_paise':x[3],'timestamp':str(x[4]),'sender_ifsc':x[5],'receiver_ifsc':x[6],'payment_mode':x[7],'narration':x[8],'ip':x[9],'device':x[10]} for x in tx]}
 
 @app.get('/api/account/{account_id}/transactions')
 def account_transactions(account_id: str, limit: int=100):
