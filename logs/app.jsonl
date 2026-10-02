@@ -49,3 +49,6 @@
 {"ts": "2026-10-02T16:14:46Z", "level": "INFO", "message": "trace request_id=09683ad9b4974aa4ba5e70c4ed2bf00d victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 31884}
 {"ts": "2026-10-02T16:16:40Z", "level": "INFO", "message": "trace request_id=ffb3782e02fe4956896dad69964b13b9 victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 31884}
 {"ts": "2026-10-02T16:34:47Z", "level": "INFO", "message": "trace request_id=34e6727bc4ab4e67a717ea029b6e8c88 victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 31884}
+{"ts": "2026-10-02T18:53:00Z", "level": "INFO", "message": "startup env=development config_hash=c701945fc4ed84c359d148edea5c206293ef94277f396e45e1b4bdbc457a7d69 dataset=full-real", "logger": "abhedya", "pid": 12464}
+{"ts": "2026-10-02T18:53:04Z", "level": "ERROR", "message": "unhandled request_id=718d3f29729b44638e1f86254f8b6bc2 path=/api/metrics", "logger": "abhedya", "pid": 12464}
+{"ts": "2026-10-02T18:58:42Z", "level": "INFO", "message": "trace request_id=3ebb74c09303494fad6d31dadedc658f victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 12464}
