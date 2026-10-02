@@ -52,6 +52,7 @@ type State = {
   currentTimeIndex: number;
   isPlaying: boolean;
   activeCaseId: string | null;
+  darkMode: boolean;
   set: (x: Partial<State>) => void;
 };
 
@@ -76,6 +77,7 @@ export const useStore = create<State>((set) => ({
   currentTimeIndex: 0,
   isPlaying: false,
   activeCaseId: null,
+  darkMode: localStorage.getItem('abhedya_dark') === '1',
   set: (x) => set(x),
 }));
 
@@ -143,7 +145,7 @@ function Sidebar() {
 }
 
 function Header() {
-  const { view, apiKey, set } = useStore();
+  const { view, apiKey, darkMode, set } = useStore();
   const names: Record<string, string> = {
     overview: 'Overview',
     datasets: 'Datasets',
@@ -155,6 +157,12 @@ function Header() {
   };
   const [draft, setDraft] = useState(apiKey);
 
+  function toggleTheme() {
+    const next = !darkMode;
+    localStorage.setItem('abhedya_dark', next ? '1' : '0');
+    set({ darkMode: next });
+  }
+
   return (
     <header>
       <div>
@@ -163,6 +171,14 @@ function Header() {
       </div>
       <div className="header-tools">
         <span className="online">● System online</span>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={darkMode ? 'Light mode' : 'Dark mode'}
+        >
+          {darkMode ? '☀' : '☾'}
+        </button>
         <input
           aria-label="API key"
           placeholder="API key (optional)"
@@ -245,26 +261,66 @@ function Overview() {
 
 function Datasets() {
   const { apiKey, set } = useStore();
-  const [file, setFile] = useState<File>();
+  const [file, setFile] = useState<File | undefined>();
   const [status, setStatus] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'uploading' | 'indexing' | 'done' | 'error'>('idle');
+  const [uploadPct, setUploadPct] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
 
-  async function upload() {
-    if (!file) return setStatus('Choose a CSV file first.');
-    setStatus('Uploading and indexing with DuckDB…');
-    setLoading(true);
+  const loading = phase === 'uploading' || phase === 'indexing';
+
+  function pickFile(f: File | undefined) {
+    if (!f) return;
+    setFile(f);
+    setStatus('');
+    setPhase('idle');
+    setUploadPct(0);
+  }
+
+  function upload() {
+    if (!file) { setStatus('Choose a CSV file first.'); return; }
+    setPhase('uploading');
+    setUploadPct(0);
+    setStatus('');
+
     const fd = new FormData();
     fd.append('file', file);
-    try {
-      const x = await api('/api/datasets/upload', { method: 'POST', body: fd }, apiKey);
-      setStatus(`Indexed ${x.rows.toLocaleString()} rows · ${x.accounts.toLocaleString()} accounts`);
-      set({ view: 'trace' });
-    } catch (e: any) {
-      setStatus(e.message);
-    } finally {
-      setLoading(false);
-    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/datasets/upload');
+    if (apiKey) xhr.setRequestHeader('X-API-Key', apiKey);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setUploadPct(Math.round((e.loaded / e.total) * 100));
+    };
+
+    xhr.upload.onload = () => {
+      setUploadPct(100);
+      setPhase('indexing');
+    };
+
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setStatus(`Indexed ${body.rows.toLocaleString()} rows · ${body.accounts.toLocaleString()} accounts`);
+          setPhase('done');
+          setTimeout(() => set({ view: 'trace' }), 1200);
+        } else {
+          setStatus(body?.error?.message || body?.detail || `HTTP ${xhr.status}`);
+          setPhase('error');
+        }
+      } catch {
+        setStatus(`HTTP ${xhr.status}`);
+        setPhase('error');
+      }
+    };
+
+    xhr.onerror = () => { setStatus('Network error — is the backend running?'); setPhase('error'); };
+    xhr.send(fd);
   }
+
+  const fmt = (b: number) => b > 1_048_576 ? `${(b / 1_048_576).toFixed(1)} MB` : `${(b / 1024).toFixed(0)} KB`;
 
   return (
     <>
@@ -278,25 +334,63 @@ function Datasets() {
       </div>
       <section className="card upload">
         <div className="upload-icon">↥</div>
-        <div>
+        <div style={{ flex: 1 }}>
           <h3>Upload transaction CSV</h3>
-          <p>
-            Required columns: Transaction_ID, Sender_Account, Receiver_Account, Sender_IFSC,
-            Receiver_IFSC, Amount, Timestamp, Payment_Mode, Narration, IP_Address, Device_Type.
+          <p style={{ marginBottom: 18 }}>
+            Required columns: <code>Transaction_ID, Sender_Account, Receiver_Account, Amount, Timestamp</code> and more.
           </p>
-          <label className="drop">
+
+          {/* Drop zone */}
+          <label
+            className={`drop${dragOver ? ' drop-active' : ''}${file ? ' drop-has-file' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFile(e.dataTransfer.files?.[0]); }}
+          >
             <input
               type="file"
               accept=".csv,text/csv"
-              onChange={(e) => setFile(e.target.files?.[0])}
+              onChange={(e) => pickFile(e.target.files?.[0])}
             />
-            <b>{file?.name || 'Choose a CSV file'}</b>
-            <small>2M+ rows supported · processed locally in ≤60s</small>
+            {file ? (
+              <>
+                <span className="drop-file-name">📄 {file.name}</span>
+                <small>{fmt(file.size)} · ready to upload</small>
+              </>
+            ) : (
+              <>
+                <span className="drop-hint">↥ Drag &amp; drop or click to browse</span>
+                <small>CSV · 2M+ rows supported · processed locally</small>
+              </>
+            )}
           </label>
-          <button className="primary" onClick={upload} disabled={loading}>
-            {loading ? 'Processing…' : 'Upload & index →'}
+
+          {/* Progress bar */}
+          {(loading || phase === 'done') && (
+            <div className="upload-progress-wrap">
+              <div className="upload-progress-header">
+                <span>{phase === 'uploading' ? `Uploading… ${uploadPct}%` : phase === 'indexing' ? 'Indexing with DuckDB…' : '✓ Done'}</span>
+                {phase === 'uploading' && <span>{uploadPct}%</span>}
+              </div>
+              <div className="upload-progress-track">
+                <div
+                  className={`upload-progress-bar${phase === 'indexing' ? ' indeterminate' : ''}`}
+                  style={phase === 'uploading' ? { width: `${uploadPct}%` } : undefined}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Status message */}
+          {status && (
+            <p className={`upload-status${phase === 'error' ? ' upload-status-error' : phase === 'done' ? ' upload-status-ok' : ''}`}>
+              {status}
+            </p>
+          )}
+
+          <button className="primary" onClick={upload} disabled={loading} style={{ marginTop: 16 }}>
+            {loading ? 'Working…' : 'Upload & index →'}
           </button>
-          <span className="status">{status}</span>
         </div>
       </section>
     </>
@@ -522,6 +616,7 @@ function TraceView() {
     isolatedNode,
     currentTimeIndex,
     isPlaying,
+    darkMode,
   } = useStore();
   const [victim, setVictim] = useState('KKBK10000000');
   const [hops, setHops] = useState(4);
@@ -532,6 +627,7 @@ function TraceView() {
   const [caseName, setCaseName] = useState('');
   const [activeLayerFilter, setActiveLayerFilter] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [highlightMules, setHighlightMules] = useState(false);
 
   const graphRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core>();
@@ -575,6 +671,15 @@ function TraceView() {
 
     cyRef.current?.destroy();
 
+    const isDark = darkMode;
+    const canvasBg   = isDark ? '#0d0f0e' : '#f8fafc';
+    const labelColor = isDark ? '#e2e8e5' : '#18312d';
+    const edgeLabelBg= isDark ? '#141716' : '#ffffff';
+    const edgeLabelColor = isDark ? '#a0aaa6' : '#374151';
+
+    // Mule layers – every non-VICTIM node is part of the mule chain
+    const MULE_LAYERS = new Set(['L1', 'L2', 'L3']);
+
     // Determine nodes to display (filter if isolated)
     let displayNodes = trace.nodes;
     let displayEdges = trace.edges;
@@ -603,17 +708,22 @@ function TraceView() {
       }
     }
 
+    // mule chain: set of node IDs that are mule layers
+    const muleNodeIds = new Set(displayNodes.filter((n) => MULE_LAYERS.has(n.layer)).map((n) => n.id));
+
     const elements = [
       ...displayNodes.map((n) => ({
         data: {
           id: n.id,
-          label: n.id,
+          label: n.id.length > 10 ? n.id.slice(0, 10) + '…' : n.id,
+          fullLabel: n.id,
           layer: n.layer,
           risk: n.risk || 0,
           role: n.role || 'none',
           bank: n.bank || '',
           tier: n.tier || 'Low',
           color: LAYER_COLORS[n.layer] || '#c9ef79',
+          isMule: MULE_LAYERS.has(n.layer) ? 1 : 0,
         },
       })),
       ...displayEdges.map((e) => ({
@@ -626,6 +736,7 @@ function TraceView() {
           hop: e.hop,
           markers: e.markers,
           residual: e.residual_paise || 0,
+          isMuleEdge: (muleNodeIds.has(e.from) || muleNodeIds.has(e.to)) ? 1 : 0,
         },
       })),
     ];
@@ -634,74 +745,157 @@ function TraceView() {
       container: graphRef.current,
       elements,
       style: [
+        // ── Base node ──────────────────────────────────────────────────
         {
           selector: 'node',
           style: {
             'background-color': 'data(color)',
             label: 'data(label)',
-            'font-size': '10px',
-            'font-weight': 'bold',
-            color: '#18312d',
-            'text-valign': 'center',
+            'font-size': '9px',
+            'font-weight': '700' as any,
+            color: labelColor,
+            'text-valign': 'bottom',
             'text-halign': 'center',
-            width: 38,
-            height: 38,
-            'border-width': 2,
-            'border-color': '#ffffff',
+            'text-margin-y': 4,
+            width: 42,
+            height: 42,
+            'border-width': 2.5,
+            'border-color': 'data(color)',
             'overlay-opacity': 0,
+            'text-outline-width': isDark ? 2 : 0,
+            'text-outline-color': isDark ? '#0d0f0e' : 'transparent',
           },
         },
+        // ── Victim node ────────────────────────────────────────────────
         {
           selector: 'node[layer = "VICTIM"]',
           style: {
-            shape: 'star',
-            width: 46,
-            height: 46,
+            shape: 'ellipse',
+            width: 48,
+            height: 48,
             'background-color': '#3b82f6',
-            color: '#ffffff',
+            'border-color': '#93c5fd',
+            'border-width': 3,
+            color: labelColor,
           },
         },
+        // ── L1 Collector ───────────────────────────────────────────────
+        {
+          selector: 'node[layer = "L1"]',
+          style: {
+            'background-color': '#ef4444',
+            'border-color': '#fca5a5',
+          },
+        },
+        // ── L2 Distributor ─────────────────────────────────────────────
+        {
+          selector: 'node[layer = "L2"]',
+          style: {
+            'background-color': '#f59e0b',
+            'border-color': '#fcd34d',
+          },
+        },
+        // ── L3 Terminal ────────────────────────────────────────────────
+        {
+          selector: 'node[layer = "L3"]',
+          style: {
+            'background-color': '#8b5cf6',
+            'border-color': '#c4b5fd',
+          },
+        },
+        // ── Selected node ──────────────────────────────────────────────
         {
           selector: 'node:selected',
           style: {
             'border-width': 4,
             'border-color': '#fbbf24',
-            'background-color': '#fbbf24',
-            color: '#000000',
+            'overlay-opacity': 0,
           },
         },
+        // ── Base edge ──────────────────────────────────────────────────
         {
           selector: 'edge',
           style: {
-            'line-color': '#9db8a8',
-            'target-arrow-color': '#9db8a8',
+            'line-color': isDark ? '#3a4a44' : '#c5d5cf',
+            'target-arrow-color': isDark ? '#3a4a44' : '#c5d5cf',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
-            width: 2,
+            width: 1.5,
             label: 'data(label)',
             'font-size': '8px',
-            color: '#374151',
-            'text-background-color': '#ffffff',
-            'text-background-opacity': 0.8,
-            'text-background-padding': '2px',
+            'font-weight': '600' as any,
+            color: edgeLabelColor,
+            'text-background-color': edgeLabelBg,
+            'text-background-opacity': 0.85,
+            'text-background-padding': '3px' as any,
+            'text-border-color': isDark ? '#252b28' : '#e5e7eb',
+            'text-border-width': 1,
+            'text-border-opacity': 1,
           },
         },
+        // ── Mule chain edges (red solid) ───────────────────────────────
+        {
+          selector: 'edge[isMuleEdge = 1]',
+          style: {
+            'line-color': '#ef4444',
+            'target-arrow-color': '#ef4444',
+            width: 2.5,
+          },
+        },
+        // ── Selected edge ──────────────────────────────────────────────
         {
           selector: 'edge:selected',
           style: {
-            'line-color': '#f59e0b',
-            'target-arrow-color': '#f59e0b',
-            width: 3.5,
+            'line-color': '#fbbf24',
+            'target-arrow-color': '#fbbf24',
+            width: 4,
           },
         },
+        // ── Mule highlight ON: dim non-mule nodes ──────────────────────
+        ...(highlightMules ? [
+          {
+            selector: 'node[isMule = 0]',
+            style: {
+              opacity: 0.15,
+            },
+          },
+          {
+            selector: 'node[isMule = 1]',
+            style: {
+              opacity: 1,
+              'border-width': 4,
+              'border-color': '#ef4444',
+            },
+          },
+          {
+            selector: 'edge[isMuleEdge = 0]',
+            style: {
+              opacity: 0.08,
+            },
+          },
+          {
+            selector: 'edge[isMuleEdge = 1]',
+            style: {
+              opacity: 1,
+              'line-color': '#ef4444',
+              'target-arrow-color': '#ef4444',
+              width: 3,
+            },
+          },
+        ] : []),
       ],
       layout: {
         name: 'breadthfirst',
         directed: true,
-        padding: 30,
-        spacingFactor: 1.4,
+        padding: 40,
+        spacingFactor: 1.6,
       },
     });
+
+    // apply canvas background directly
+    if (graphRef.current) {
+      graphRef.current.style.backgroundColor = canvasBg;
+    }
 
     // Node click handler
     cy.on('tap', 'node', (evt) => {
@@ -726,7 +920,7 @@ function TraceView() {
 
     cyRef.current = cy;
     return () => cy.destroy();
-  }, [trace, isolatedNode, activeLayerFilter, currentTimeIndex]);
+  }, [trace, isolatedNode, activeLayerFilter, currentTimeIndex, highlightMules, darkMode]);
 
   // Timeline Playback Animation
   useEffect(() => {
@@ -900,59 +1094,65 @@ function TraceView() {
           {/* TAB 1: INTERACTIVE GRAPH & CONTROLS */}
           {activeTab === 'graph' && (
             <div style={{ display: 'grid', gridTemplateColumns: selectedNode || selectedEdge ? '1fr 340px' : '1fr', gap: '16px' }}>
-              <div className="card graph-card" style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <h3>Suspect Network Graph</h3>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    {/* Layer Filter Buttons */}
-                    <span style={{ fontSize: '11px', color: '#6b7280', marginRight: '4px' }}>Filter:</span>
+              <div className="card graph-card" style={{ position: 'relative', padding: '16px' }}>
+                {/* ── Graph toolbar ────────────────────────────── */}
+                <div className="graph-toolbar">
+                  <div className="graph-toolbar-left">
+                    <h3 style={{ margin: 0, fontSize: '14px' }}>Suspect Network Graph</h3>
+                    {/* Legend dots */}
+                    <div className="graph-legend">
+                      {[
+                        { color: '#3b82f6', label: 'Victim' },
+                        { color: '#ef4444', label: 'L1 Collector' },
+                        { color: '#f59e0b', label: 'L2 Distributor' },
+                        { color: '#8b5cf6', label: 'L3 Terminal' },
+                      ].map(({ color, label }) => (
+                        <span key={label} className="graph-legend-item">
+                          <span className="graph-legend-dot" style={{ background: color }} />
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="graph-toolbar-right">
+                    {/* Mule highlight toggle */}
                     <button
-                      className={activeLayerFilter === null ? 'primary' : 'secondary'}
-                      style={{ padding: '3px 8px', fontSize: '10px' }}
-                      onClick={() => setActiveLayerFilter(null)}
+                      className={`graph-btn${highlightMules ? ' graph-btn-active' : ''}`}
+                      onClick={() => setHighlightMules((v) => !v)}
+                      title="Highlight mule chain nodes; fade non-mule nodes"
                     >
-                      All
+                      <span className="graph-btn-dot" style={{ background: '#ef4444' }} />
+                      {highlightMules ? 'Mule Chain ON' : 'Highlight Mule Chain'}
                     </button>
+
+                    {/* Layer filter */}
+                    <span className="graph-divider" />
+                    <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Filter:</span>
+                    <button
+                      className={`graph-btn${activeLayerFilter === null ? ' graph-btn-active' : ''}`}
+                      onClick={() => setActiveLayerFilter(null)}
+                    >All</button>
                     {['L1', 'L2', 'L3'].map((l) => (
                       <button
                         key={l}
-                        className={activeLayerFilter === l ? 'primary' : 'secondary'}
-                        style={{ padding: '3px 8px', fontSize: '10px', backgroundColor: activeLayerFilter === l ? LAYER_COLORS[l] : undefined }}
+                        className={`graph-btn${activeLayerFilter === l ? ' graph-btn-active' : ''}`}
+                        style={activeLayerFilter === l ? { borderColor: LAYER_COLORS[l], color: LAYER_COLORS[l] } : {}}
                         onClick={() => setActiveLayerFilter(activeLayerFilter === l ? null : l)}
-                      >
-                        {l}
-                      </button>
+                      >{l}</button>
                     ))}
                     {isolatedNode && (
                       <button
-                        className="secondary"
-                        style={{ padding: '3px 8px', fontSize: '10px', borderColor: '#ef4444', color: '#ef4444' }}
+                        className="graph-btn"
+                        style={{ borderColor: '#ef4444', color: '#ef4444' }}
                         onClick={() => set({ isolatedNode: null })}
-                      >
-                        Reset Isolation ✕
-                      </button>
+                      >Reset ✕</button>
                     )}
                   </div>
                 </div>
 
                 {/* Cytoscape Container */}
-                <div ref={graphRef} className="cy" style={{ height: '480px', width: '100%', backgroundColor: '#f8fafc', borderRadius: '6px' }} />
-
-                {/* Graph Legend */}
-                <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '11px', color: '#4b5563' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '10px', height: '10px', backgroundColor: '#3b82f6', borderRadius: '50%' }} /> Victim (Hop 0)
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '50%' }} /> L1 Collector Mule
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '10px', height: '10px', backgroundColor: '#f59e0b', borderRadius: '50%' }} /> L2 Distributor Mule
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '10px', height: '10px', backgroundColor: '#8b5cf6', borderRadius: '50%' }} /> L3 Terminal Cash-Out
-                  </span>
-                </div>
+                <div ref={graphRef} className="cy graph-canvas" />
 
                 {/* Temporal Playback Slider */}
                 {trace.timeline && trace.timeline.length > 0 && (
@@ -1676,9 +1876,9 @@ function Benchmarks() {
 }
 
 export default function App() {
-  const { view } = useStore();
+  const { view, darkMode } = useStore();
   return (
-    <div className="shell">
+    <div className="shell" data-theme={darkMode ? 'dark' : 'light'}>
       <Sidebar />
       <main>
         <Header />
