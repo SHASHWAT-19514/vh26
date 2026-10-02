@@ -1,0 +1,3 @@
+# Large local datasets / databases
+data/datasets/default/*.duckdb
+data/inbox/*.csv
