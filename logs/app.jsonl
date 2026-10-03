@@ -69,3 +69,6 @@
 {"ts": "2026-10-02T21:57:02Z", "level": "ERROR", "message": "unhandled request_id=ebb4e0203dc347c38fb4a386db5b7c23 path=/api/metrics", "logger": "abhedya", "pid": 6892}
 {"ts": "2026-10-02T21:57:02Z", "level": "ERROR", "message": "unhandled request_id=84a1238b084b43029ca3d1b9fdd58a02 path=/api/metrics", "logger": "abhedya", "pid": 6892}
 {"ts": "2026-10-02T21:59:29Z", "level": "INFO", "message": "trace request_id=53565f44beec476c9ef488e9458e9222 victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 6892}
+{"ts": "2026-10-02T22:15:26Z", "level": "INFO", "message": "trace request_id=affcd67c455b4e5a9a25a9643b32648c victim=KKBK10000000 nodes=82 edges=87", "logger": "abhedya", "pid": 6892}
+{"ts": "2026-10-03T02:08:48Z", "level": "INFO", "message": "startup env=development config_hash=c701945fc4ed84c359d148edea5c206293ef94277f396e45e1b4bdbc457a7d69 dataset=full-real", "logger": "abhedya", "pid": 11440}
+{"ts": "2026-10-03T02:08:48Z", "level": "INFO", "message": "shutdown", "logger": "abhedya", "pid": 11440}
