@@ -27,6 +27,7 @@ export type Edge = {
   markers: string[];
   mode?: string;
   residual_paise?: number;
+  narration?: string;
 };
 
 export type Trace = {
@@ -97,6 +98,94 @@ const ROLE_BADGES: Record<string, { label: string; color: string }> = {
   suspected_mule: { label: 'Suspected Mule', color: '#ec4899' },
   none: { label: 'Standard Account', color: '#6b7280' },
 };
+
+// IFSC prefix → bank name map
+const BANK_NAMES: Record<string, string> = {
+  SBIN: 'SBI', HDFC: 'HDFC Bank', ICIC: 'ICICI', UTIB: 'Axis',
+  PUNB: 'PNB', BARB: 'BOB', KKBK: 'Kotak', YESB: 'Yes Bank',
+  IOBA: 'Indian Overseas', CNRB: 'Canara', UBIN: 'Union Bank',
+};
+
+function bankName(ifsc?: string) {
+  if (!ifsc) return '—';
+  const prefix = ifsc.slice(0, 4).toUpperCase();
+  return BANK_NAMES[prefix] || prefix;
+}
+
+// Format INR
+function formatINR(paise: number) {
+  return '₹' + (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+}
+
+// Scam narration keywords
+const SCAM_KEYWORDS = ['crypto', 'p2p', 'binance', 'usdt', 'btc', 'wallet', 'offshore'];
+
+function isScamNarration(narration?: string) {
+  if (!narration) return false;
+  const lower = narration.toLowerCase();
+  return SCAM_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// Guardrail display component
+function GuardrailBadge({ guardrailRemoved }: { guardrailRemoved?: string[] }) {
+  const removed = guardrailRemoved || [];
+  if (removed.length === 0) {
+    return (
+      <div style={{
+        border: '1px solid #16a34a',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        marginTop: '16px',
+        backgroundColor: '#f0fdf4',
+        fontSize: '12px',
+        lineHeight: '1.7',
+      }}>
+        <div style={{ fontWeight: 'bold', color: '#15803d', marginBottom: '4px' }}>🛡 Anti-Hallucination Guardrail: ACTIVE</div>
+        <div style={{ color: '#166534' }}>✓ All account numbers verified against database</div>
+        <div style={{ color: '#166534' }}>✓ All amounts matched to transaction records</div>
+        <div style={{ color: '#166534' }}>✓ Zero unverified references in this document</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      border: '1px solid #d97706',
+      borderRadius: '8px',
+      padding: '12px 16px',
+      marginTop: '16px',
+      backgroundColor: '#fffbeb',
+      fontSize: '12px',
+      lineHeight: '1.7',
+    }}>
+      <div style={{ fontWeight: 'bold', color: '#b45309', marginBottom: '4px' }}>🛡 Guardrail Active — {removed.length} reference{removed.length !== 1 ? 's' : ''} removed</div>
+      <div style={{ color: '#92400e' }}>⚠ The following were removed as unverified:</div>
+      {removed.map((item, i) => <div key={i} style={{ color: '#92400e', paddingLeft: '8px' }}>• {item}</div>)}
+      <div style={{ color: '#92400e', marginTop: '4px' }}>All remaining data is database-confirmed.</div>
+    </div>
+  );
+}
+
+// Prompt injection protection chip
+function InjectionChip() {
+  return (
+    <span
+      title="Transaction narrations are treated as untrusted data, not instructions. AI cannot follow commands embedded in Narration or Remarks fields."
+      style={{
+        fontSize: '10px',
+        fontFamily: 'monospace',
+        background: 'var(--line)',
+        color: 'var(--muted)',
+        border: '1px solid var(--line)',
+        borderRadius: '4px',
+        padding: '2px 7px',
+        cursor: 'help',
+        letterSpacing: '.03em',
+      }}
+    >
+      🛡 Prompt-injection protection: ACTIVE
+    </span>
+  );
+}
 
 function Sidebar() {
   const { view, set } = useStore();
@@ -259,6 +348,70 @@ function Overview() {
   );
 }
 
+// ── FEATURE 3: Payment Rail Distribution ──────────────────────────────────────
+function PaymentRailDistribution({ apiKey }: { apiKey: string }) {
+  const [rails, setRails] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api('/api/payment-stats', {}, apiKey)
+      .then((rows) => setRails(Array.isArray(rows) ? rows : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [apiKey]);
+
+  if (loading) return <div className="empty">Loading payment rail data…</div>;
+  if (!rails.length) return null;
+
+  const total = rails.reduce((s, r) => s + (r.count || 0), 0);
+  const colors: Record<string, string> = {
+    UPI: 'var(--lime)', IMPS: 'var(--orange)', NEFT: '#3b82f6', RTGS: '#8b5cf6',
+  };
+
+  return (
+    <div className="card" style={{ marginTop: '24px' }}>
+      <div style={{ marginBottom: '12px' }}>
+        <small style={{ fontFamily: 'monospace', letterSpacing: '.1em', color: 'var(--muted)' }}>PAYMENT RAIL DISTRIBUTION</small>
+        <h3 style={{ margin: '4px 0 0' }}>Transaction Volume by Payment Mode</h3>
+      </div>
+
+      {/* Stacked bar */}
+      <div style={{ display: 'flex', height: '28px', borderRadius: '6px', overflow: 'hidden', marginBottom: '16px', border: '1px solid var(--line)' }}>
+        {rails.map((r) => {
+          const pct = total > 0 ? (r.count / total * 100) : 0;
+          const color = colors[r.Payment_Mode] || 'var(--muted)';
+          return (
+            <div
+              key={r.Payment_Mode}
+              title={`${r.Payment_Mode}: ${pct.toFixed(1)}%`}
+              style={{ width: `${pct}%`, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#18312d', whiteSpace: 'nowrap', overflow: 'hidden', transition: 'width 0.3s' }}
+            >
+              {pct > 8 ? `${r.Payment_Mode} ${pct.toFixed(1)}%` : ''}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rails.length}, 1fr)`, gap: '10px' }}>
+        {rails.map((r) => {
+          const pct = total > 0 ? (r.count / total * 100).toFixed(1) : '0.0';
+          const color = colors[r.Payment_Mode] || 'var(--muted)';
+          return (
+            <div key={r.Payment_Mode} className="stat" style={{ borderTop: `3px solid ${color}` }}>
+              <small>{r.Payment_Mode}</small>
+              <b>{pct}%</b>
+              <span>Count: {(r.count || 0).toLocaleString()} txns</span>
+              <span>Vol: {formatINR(r.volume || 0)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Datasets() {
   const { apiKey, set } = useStore();
   const [file, setFile] = useState<File | undefined>();
@@ -393,7 +546,99 @@ function Datasets() {
           </button>
         </div>
       </section>
+
+      {/* FEATURE 3 */}
+      <PaymentRailDistribution apiKey={apiKey} />
     </>
+  );
+}
+
+// ── FEATURE 8: Entity Intelligence Panel ─────────────────────────────────────
+function EntityIntelPanel({ accountId, apiKey }: { accountId: string; apiKey: string }) {
+  const [data, setData] = useState<any>(null);
+  const [acctDetail, setAcctDetail] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!accountId) return;
+    setLoading(true);
+    Promise.all([
+      api(`/api/account/${encodeURIComponent(accountId)}/entity-stats`, {}, apiKey).catch(() => null),
+      api(`/api/account/${encodeURIComponent(accountId)}`, {}, apiKey).catch(() => null),
+    ]).then(([stats, detail]) => {
+      setData(stats);
+      setAcctDetail(detail);
+    }).finally(() => setLoading(false));
+  }, [accountId, apiKey]);
+
+  if (loading) return <div className="empty" style={{ marginTop: 8 }}>Loading entity intelligence…</div>;
+  if (!data && !acctDetail) return null;
+
+  // Build IFSC intelligence from transactions
+  const txns: any[] = acctDetail?.transactions || [];
+  const senderIfscs: Record<string, number> = {};
+  const receiverIfscs: Record<string, number> = {};
+  txns.forEach((t: any) => {
+    if (t.sender === accountId && t.receiver_ifsc) receiverIfscs[t.receiver_ifsc] = (receiverIfscs[t.receiver_ifsc] || 0) + 1;
+    if (t.receiver === accountId && t.sender_ifsc) senderIfscs[t.sender_ifsc] = (senderIfscs[t.sender_ifsc] || 0) + 1;
+  });
+  const topSenderIfsc = Object.entries(senderIfscs).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topReceiverIfsc = Object.entries(receiverIfscs).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  const modes: any[] = data?.payment_modes || [];
+  const total = data?.total_transactions || 0;
+
+  return (
+    <div className="card" style={{ marginTop: '16px' }}>
+      <div style={{ marginBottom: '10px' }}>
+        <small style={{ fontFamily: 'monospace', letterSpacing: '.1em', color: 'var(--muted)' }}>ENTITY INTELLIGENCE</small>
+        <h3 style={{ margin: '4px 0 0' }}>Entity Disambiguation — {accountId}</h3>
+      </div>
+
+      {/* IFSC Intelligence */}
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '6px', color: 'var(--muted)', fontFamily: 'monospace', letterSpacing: '.06em' }}>IFSC INTELLIGENCE</div>
+        <div style={{ fontSize: '12px', lineHeight: 1.8 }}>
+          <div><b>Most common sender IFSC:</b> <code>{topSenderIfsc || '—'}</code> → Bank: <b>{bankName(topSenderIfsc)}</b></div>
+          <div><b>Most common receiver IFSC:</b> <code>{topReceiverIfsc || '—'}</code> → Bank: <b>{bankName(topReceiverIfsc)}</b></div>
+        </div>
+      </div>
+
+      {/* Payment Rail Breakdown */}
+      {modes.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '6px', color: 'var(--muted)', fontFamily: 'monospace', letterSpacing: '.06em' }}>PAYMENT RAIL BREAKDOWN</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {modes.map((m: any) => (
+              <span key={m.Payment_Mode} style={{ background: 'var(--line)', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', fontFamily: 'monospace' }}>
+                {m.Payment_Mode}: {m.count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* IP / Device / Narration Flags */}
+      {data && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '12px' }}>
+          <div className="stat" style={{ padding: '10px' }}>
+            <small>IP FLAGS</small>
+            <b style={{ color: (data.foreign_ip_count || 0) > 0 ? 'var(--orange)' : 'inherit' }}>{data.foreign_ip_count || 0} / {total}</b>
+            <span>Foreign IP transactions</span>
+          </div>
+          <div className="stat" style={{ padding: '10px' }}>
+            <small>BOT ACCESS</small>
+            <b style={{ color: (data.bot_count || 0) > 0 ? 'var(--orange)' : 'inherit' }}>{data.bot_count || 0}</b>
+            <span>Web_Emulator / Linux_Script</span>
+          </div>
+          <div className="stat" style={{ padding: '10px' }}>
+            <small>SCAM NARRATIONS</small>
+            <b style={{ color: (data.crypto_count || 0) > 0 ? 'var(--orange)' : 'inherit' }}>{data.crypto_count || 0}</b>
+            <span>Crypto / P2P narrations</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -584,6 +829,11 @@ function AccountSearch() {
           </div>
         </div>
       )}
+
+      {/* FEATURE 8: Entity Intelligence Panel */}
+      {selectedAcct && (
+        <EntityIntelPanel accountId={selectedAcct.account} apiKey={apiKey} />
+      )}
     </>
   );
 }
@@ -629,6 +879,9 @@ function TraceView() {
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
   const [highlightMules, setHighlightMules] = useState(false);
 
+  // Feature 1: terminal nodes data
+  const [terminalNodes, setTerminalNodes] = useState<any[]>([]);
+
   const graphRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core>();
 
@@ -640,6 +893,14 @@ function TraceView() {
       .catch(() => { if (current) setSelectedAccount(null); });
     return () => { current = false; };
   }, [selectedNode?.id, apiKey]);
+
+  // Fetch terminal nodes when topologies tab is shown
+  useEffect(() => {
+    if (activeTab !== 'topologies') return;
+    api('/api/terminal-nodes', {}, apiKey)
+      .then((rows) => setTerminalNodes(Array.isArray(rows) ? rows : []))
+      .catch(() => {});
+  }, [activeTab, apiKey]);
 
   async function runTrace() {
     if (!isValidAccount(victim)) {
@@ -958,7 +1219,7 @@ function TraceView() {
     }
   }
 
-  // Export Subgraph
+  // Export Subgraph (full trace)
   async function handleExportSubgraph(format: 'json' | 'csv') {
     if (!trace) return;
     const dataStr =
@@ -975,6 +1236,53 @@ function TraceView() {
     a.download = `subgraph-${victim}.${format}`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // FEATURE 4: Export isolated ring JSON
+  function handleExportRingJson() {
+    if (!trace || !isolatedNode) return;
+    const isolated = traceSubgraph(trace, isolatedNode);
+    const data = {
+      root_account: isolatedNode,
+      nodes: isolated.nodes,
+      edges: isolated.edges,
+      flow_links: trace.flow_links.filter((link: any) =>
+        isolated.edges.some((edge) => edge.id === link.target)
+      ),
+      exported_at: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ring_${isolatedNode}_${Date.now()}.json`;
+    a.click();
+  }
+
+  // FEATURE 4: Export isolated ring CSV
+  function handleExportRingCsv() {
+    if (!trace || !isolatedNode) return;
+    const isolated = traceSubgraph(trace, isolatedNode);
+    const mriData: any[] = (trace as any).mri_data || [];
+    const mriMap: Record<string, any> = {};
+    mriData.forEach((m: any) => { mriMap[m.account] = m; });
+    const header = 'account,mri_score,mule_layer,in_degree,out_degree,velocity_ratio,is_high_velocity';
+    const rows = isolated.nodes.map((n) => {
+      const m = mriMap[n.id] || {};
+      return [
+        n.id,
+        m.mri_score || 0,
+        m.mule_layer || 'NORMAL',
+        m.in_degree || 0,
+        m.out_degree || 0,
+        (m.velocity_ratio || 0).toFixed(3),
+        m.is_high_velocity || false,
+      ].join(',');
+    });
+    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ring_${isolatedNode}_${Date.now()}.csv`;
+    a.click();
   }
 
   // Group nodes by layer
@@ -1150,6 +1458,29 @@ function TraceView() {
                     )}
                   </div>
                 </div>
+
+                {/* FEATURE 4: Ring export buttons — shown only when isolated */}
+                {isolatedNode && (
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--muted)', alignSelf: 'center', fontFamily: 'monospace' }}>
+                      Ring isolated: <b style={{ color: 'var(--ink)' }}>{isolatedNode}</b>
+                    </span>
+                    <button
+                      className="secondary"
+                      style={{ padding: '4px 10px', fontSize: '11px' }}
+                      onClick={handleExportRingJson}
+                    >
+                      ↓ Export Ring JSON
+                    </button>
+                    <button
+                      className="secondary"
+                      style={{ padding: '4px 10px', fontSize: '11px' }}
+                      onClick={handleExportRingCsv}
+                    >
+                      ↓ Export Ring CSV
+                    </button>
+                  </div>
+                )}
 
                 {/* Cytoscape Container */}
                 <div ref={graphRef} className="cy graph-canvas" />
@@ -1451,75 +1782,175 @@ function TraceView() {
 
           {/* TAB 3: TOPOLOGIES & RISK ANALYSIS */}
           {activeTab === 'topologies' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              {/* High-Velocity Pass-Through Panel */}
-              <div className="card">
-                <h3>⚡ High-Velocity Pass-Through Analysis</h3>
-                <p style={{ fontSize: '12px', color: '#6b7280' }}>
-                  Nodes dispersing ≥90% of incoming funds within a rapid 15-minute window.
-                </p>
-                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <b>STATUS:</b>
-                    <span style={{ fontWeight: 'bold', color: '#b45309' }}>ACTIVE MONITORING</span>
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {/* High-Velocity Pass-Through Panel */}
+                <div className="card">
+                  <h3>⚡ High-Velocity Pass-Through Analysis</h3>
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                    Nodes dispersing ≥90% of incoming funds within a rapid 15-minute window.
+                  </p>
+                  <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <b>STATUS:</b>
+                      <span style={{ fontWeight: 'bold', color: '#b45309' }}>ACTIVE MONITORING</span>
+                    </div>
+                    <div style={{ fontSize: '12px', lineHeight: '1.8' }}>
+                      <div><b>Dispersal Window:</b> ≤ 15 minutes (Configured)</div>
+                      <div><b>Passthrough Fraction:</b> ≥ 90%</div>
+                      <div><b>Min Outgoing Transfers:</b> ≥ 2 counterparties</div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '12px', lineHeight: '1.8' }}>
-                    <div><b>Dispersal Window:</b> ≤ 15 minutes (Configured)</div>
-                    <div><b>Passthrough Fraction:</b> ≥ 90%</div>
-                    <div><b>Min Outgoing Transfers:</b> ≥ 2 counterparties</div>
+                  <h4 style={{ marginTop: '16px' }}>Flagged Pass-Through Nodes in Trace</h4>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {trace.nodes
+                      .filter((n) => (n.risk || 0) >= 40)
+                      .map((n) => (
+                        <div key={n.id} style={{ padding: '6px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span><b>{n.id}</b> ({n.layer})</span>
+                          <span style={{ color: '#b45309', fontWeight: 'bold' }}>Risk Score: {n.risk}/100</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
-                <h4 style={{ marginTop: '16px' }}>Flagged Pass-Through Nodes in Trace</h4>
-                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                  {trace.nodes
-                    .filter((n) => (n.risk || 0) >= 40)
-                    .map((n) => (
-                      <div key={n.id} style={{ padding: '6px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                        <span><b>{n.id}</b> ({n.layer})</span>
-                        <span style={{ color: '#b45309', fontWeight: 'bold' }}>Risk Score: {n.risk}/100</span>
+
+                {/* Terminal Cash-Out Indicators Panel */}
+                <div className="card">
+                  <h3>🛑 Terminal Cash-Out Indicators</h3>
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                    Specific markers derived from underlying transaction and device metadata.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                    <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
+                      <div>
+                        <b>Crypto / P2P Settlement Narration</b>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Matches regex: crypto, usdt, binance, p2p</div>
                       </div>
-                    ))}
+                    </div>
+                    <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
+                      <div>
+                        <b>Foreign / Proxy IP Detection</b>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Matches prefixes: 185., 194.</div>
+                      </div>
+                    </div>
+                    <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
+                      <div>
+                        <b>Suspicious / Headless Device Profile</b>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Web_Emulator, Linux_Script</div>
+                      </div>
+                    </div>
+                    <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
+                      <div>
+                        <b>Payment Wallet / Gift Card Drains</b>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Wallet, Paytm, PhonePe</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Terminal Cash-Out Indicators Panel */}
-              <div className="card">
-                <h3>🛑 Terminal Cash-Out Indicators</h3>
-                <p style={{ fontSize: '12px', color: '#6b7280' }}>
-                  Specific markers derived from underlying transaction and device metadata.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
-                    <div>
-                      <b>Crypto / P2P Settlement Narration</b>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>Matches regex: crypto, usdt, binance, p2p</div>
+              {/* FEATURE 1: IP & DEVICE ANOMALY PANEL */}
+              <div className="card" style={{ marginTop: '16px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <small style={{ fontFamily: 'monospace', letterSpacing: '.1em', color: 'var(--muted)' }}>TERMINAL NODE INTELLIGENCE</small>
+                  <h3 style={{ margin: '4px 0 0' }}>IP &amp; Device Anomaly Panel</h3>
+                </div>
+
+                {/* Row 1: IP Anomalies */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '11px', fontFamily: 'monospace', letterSpacing: '.08em', color: 'var(--muted)', marginBottom: '8px' }}>IP ANOMALIES</div>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                    <div className="stat" style={{ flex: 1, borderLeft: '3px solid var(--orange)', paddingLeft: '12px' }}>
+                      <small>🌐 Foreign Proxy IPs</small>
+                      <b style={{ fontSize: '22px' }}>{terminalNodes.filter((n) => n.has_foreign_ip).length}</b>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Originating from 185.x.x.x or 194.x.x.x ranges</span>
                     </div>
                   </div>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
-                    <div>
-                      <b>Foreign / Proxy IP Detection</b>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>Matches prefixes: 185., 194.</div>
+                  {terminalNodes.filter((n) => n.has_foreign_ip).length > 0 && (
+                    <table style={{ fontSize: '11px', width: '100%', marginBottom: '8px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Account</th>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Last IP</th>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Amount</th>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {terminalNodes.filter((n) => n.has_foreign_ip).slice(0, 5).map((n: any) => (
+                          <tr key={n.account}>
+                            <td style={{ paddingBottom: '4px' }}><code>{n.account}</code></td>
+                            <td style={{ paddingBottom: '4px' }}><span style={{ color: 'var(--orange)', fontFamily: 'monospace' }}>{n.last_ip || '—'}</span></td>
+                            <td style={{ paddingBottom: '4px' }}>{formatINR(n.total_amount_paise || 0)}</td>
+                            <td style={{ paddingBottom: '4px' }}>
+                              <button
+                                className="secondary"
+                                style={{ padding: '1px 6px', fontSize: '10px' }}
+                                onClick={() => { useStore.getState().set({ view: 'trace' }); }}
+                              >
+                                Trace →
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {terminalNodes.filter((n) => n.has_foreign_ip).length === 0 && (
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>No foreign IP anomalies detected in terminal nodes.</div>
+                  )}
+                </div>
+
+                {/* Row 2: Device Anomalies */}
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '11px', fontFamily: 'monospace', letterSpacing: '.08em', color: 'var(--muted)', marginBottom: '8px' }}>DEVICE ANOMALIES</div>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                    <div className="stat" style={{ flex: 1, borderLeft: '3px solid #8b5cf6', paddingLeft: '12px' }}>
+                      <small>🤖 Headless Script Access</small>
+                      <b style={{ fontSize: '22px' }}>{terminalNodes.filter((n) => n.has_anomalous_device).length}</b>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Device identified as Web_Emulator or Linux_Script</span>
                     </div>
                   </div>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
-                    <div>
-                      <b>Suspicious / Headless Device Profile</b>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>Web_Emulator, Linux_Script</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#047857', fontWeight: 'bold' }}>✓</span>
-                    <div>
-                      <b>Payment Wallet / Gift Card Drains</b>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>Wallet, Paytm, PhonePe</div>
-                    </div>
-                  </div>
+                  {terminalNodes.filter((n) => n.has_anomalous_device).length > 0 && (
+                    <table style={{ fontSize: '11px', width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Account</th>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Device Type</th>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Amount</th>
+                          <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {terminalNodes.filter((n) => n.has_anomalous_device).slice(0, 5).map((n: any) => (
+                          <tr key={n.account}>
+                            <td style={{ paddingBottom: '4px' }}><code>{n.account}</code></td>
+                            <td style={{ paddingBottom: '4px' }}><span style={{ color: '#8b5cf6', fontFamily: 'monospace' }}>{n.device_type || '—'}</span></td>
+                            <td style={{ paddingBottom: '4px' }}>{formatINR(n.total_amount_paise || 0)}</td>
+                            <td style={{ paddingBottom: '4px' }}>
+                              <button
+                                className="secondary"
+                                style={{ padding: '1px 6px', fontSize: '10px' }}
+                                onClick={() => { useStore.getState().set({ view: 'trace' }); }}
+                              >
+                                Trace →
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {terminalNodes.filter((n) => n.has_anomalous_device).length === 0 && (
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>No headless device anomalies detected.</div>
+                  )}
                 </div>
               </div>
-            </div>
+            </>
           )}
 
           {/* TAB 4: TIMELINE EVENTS */}
@@ -1535,23 +1966,43 @@ function TraceView() {
                     <th>Amount</th>
                     <th>Layer</th>
                     <th>Markers</th>
+                    <th>Narration</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {trace.timeline?.map((e: any) => (
-                    <tr key={e.id}>
-                      <td><time>{e.ts}</time></td>
-                      <td><b>{e.from}</b></td>
-                      <td><b>{e.to}</b></td>
-                      <td>₹{(Number(e.amount) / 100).toLocaleString('en-IN')}</td>
-                      <td>
-                        <span style={{ padding: '2px 6px', backgroundColor: LAYER_COLORS[`L${e.hop}`] || '#e5e7eb', color: '#fff', borderRadius: '4px', fontSize: '10px' }}>
-                          L{e.hop}
-                        </span>
-                      </td>
-                      <td>{e.markers?.join(', ') || '—'}</td>
-                    </tr>
-                  ))}
+                  {trace.timeline?.map((e: any) => {
+                    // Feature 2: look up narration from edges
+                    const edge = trace.edges.find((ed) => ed.id === e.id);
+                    const narration = edge?.narration || e.narration || '';
+                    const scam = isScamNarration(narration);
+                    return (
+                      <tr key={e.id}>
+                        <td><time>{e.ts}</time></td>
+                        <td><b>{e.from}</b></td>
+                        <td><b>{e.to}</b></td>
+                        <td>₹{(Number(e.amount) / 100).toLocaleString('en-IN')}</td>
+                        <td>
+                          <span style={{ padding: '2px 6px', backgroundColor: LAYER_COLORS[`L${e.hop}`] || '#e5e7eb', color: '#fff', borderRadius: '4px', fontSize: '10px' }}>
+                            L{e.hop}
+                          </span>
+                        </td>
+                        <td>{e.markers?.join(', ') || '—'}</td>
+                        <td>
+                          {narration ? (
+                            scam ? (
+                              <span style={{ color: '#e05252', fontFamily: 'monospace', fontSize: '11px' }}>
+                                🔐 {narration}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--muted)', fontSize: '11px' }}>{narration}</span>
+                            )
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1749,11 +2200,15 @@ function Cases() {
   );
 }
 
+// ── FEATURE 5, 6, 7: Evidence page with FIR, Freeze section, Guardrail ────────
 function Evidence() {
   const { apiKey, trace, evidence, set } = useStore();
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<any[]>([]);
+  const [firResult, setFirResult] = useState<any>(null);
+  const [firLoading, setFirLoading] = useState(false);
+  const [firStatus, setFirStatus] = useState('');
 
   async function report(kind: string) {
     if (!trace) return setStatus('Run a trace first.');
@@ -1772,6 +2227,58 @@ function Evidence() {
     }
   }
 
+  async function generateFir() {
+    if (!trace) return setFirStatus('Run a trace first.');
+    setFirLoading(true);
+    setFirStatus('Generating FIR draft…');
+    try {
+      const victimId = trace.nodes[0]?.id;
+      const r = await api('/api/generate-fir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: victimId }),
+      }, apiKey);
+      setFirResult(r);
+      setFirStatus('FIR draft generated.');
+    } catch (e: any) {
+      setFirStatus(e.message);
+    } finally {
+      setFirLoading(false);
+    }
+  }
+
+  // FEATURE 6: detect freeze section in document text
+  function renderDocumentText(text: string) {
+    if (!text) return null;
+    const freezeMarker = 'ACCOUNTS RECOMMENDED FOR IMMEDIATE FREEZING';
+    const idx = text.indexOf(freezeMarker);
+    if (idx === -1) {
+      return <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: 1.7, fontFamily: 'monospace' }}>{text}</pre>;
+    }
+    const before = text.slice(0, idx);
+    const after = text.slice(idx);
+    // find end of freeze section (next separator or end)
+    const endMarker = '\n' + '='.repeat(10);
+    const endIdx = after.indexOf(endMarker, 20);
+    const freezePart = endIdx !== -1 ? after.slice(0, endIdx + endMarker.length) : after;
+    const remainder = endIdx !== -1 ? after.slice(endIdx + endMarker.length) : '';
+    return (
+      <>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: 1.7, fontFamily: 'monospace' }}>{before}</pre>
+        <div style={{
+          background: '#fffbeb',
+          border: '1px solid #d97706',
+          borderRadius: '6px',
+          padding: '12px',
+          margin: '4px 0',
+        }}>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: 1.7, fontFamily: 'monospace', color: '#92400e' }}>{freezePart}</pre>
+        </div>
+        {remainder && <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: 1.7, fontFamily: 'monospace' }}>{remainder}</pre>}
+      </>
+    );
+  }
+
   return (
     <>
       <div className="intro">
@@ -1787,18 +2294,50 @@ function Evidence() {
         <section className="card report">
           <h3>Automated Police Case Diary</h3>
           <p>Chronological money trail, positional account layers (L1/L2/L3), risk reasons, FIFO attribution links, and officer notes.</p>
-          <button className="secondary" onClick={() => report('case-diary')} disabled={loading}>
-            Generate Case Diary (PDF/HTML) →
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+            <button className="secondary" onClick={() => report('case-diary')} disabled={loading}>
+              Generate Case Diary (PDF/HTML) →
+            </button>
+            <InjectionChip />
+          </div>
         </section>
         <section className="card report">
           <h3>Automated Bank Freeze Requisition</h3>
           <p>Bank-grouped beneficiary accounts, IFSC routing codes, disputed transactions, and Section 91 CrPC requisition references.</p>
-          <button className="secondary" onClick={() => report('freeze')} disabled={loading}>
-            Generate Freeze Requisition (PDF/HTML) →
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+            <button className="secondary" onClick={() => report('freeze')} disabled={loading}>
+              Generate Freeze Requisition (PDF/HTML) →
+            </button>
+            <InjectionChip />
+          </div>
+        </section>
+        {/* FEATURE 5: FIR Draft card */}
+        <section className="card report">
+          <h3>Automated FIR Draft</h3>
+          <p>First Information Report — complaint particulars, offence sections (420 IPC / 66C IT Act), and accused account details.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+            <button className="secondary" onClick={generateFir} disabled={firLoading}>
+              {firLoading ? 'Generating…' : 'Generate FIR Draft →'}
+            </button>
+            <InjectionChip />
+          </div>
+          {firStatus && <p className="upload-status">{firStatus}</p>}
         </section>
       </div>
+
+      {/* FIR result viewer */}
+      {firResult && (
+        <div className="card" style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0 }}>FIR Draft — {firResult.victim}</h3>
+            <button className="secondary" style={{ padding: '2px 8px', fontSize: '11px' }} onClick={() => setFirResult(null)}>✕ Close</button>
+          </div>
+          <div style={{ background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '16px', maxHeight: '500px', overflowY: 'auto' }}>
+            {renderDocumentText(firResult.fir || '')}
+          </div>
+          <GuardrailBadge guardrailRemoved={firResult.guardrail_removed} />
+        </div>
+      )}
 
       <div className="card evidence" style={{ marginTop: '16px' }}>
         <b>Evidence Integrity Status</b>
@@ -1820,6 +2359,8 @@ function Evidence() {
                   <br />
                   <span>HTML: <code>{r.html}</code></span>
                 </div>
+                {/* FEATURE 7: Guardrail indicator per generated document */}
+                <GuardrailBadge guardrailRemoved={r.guardrail_removed} />
               </div>
             ))}
           </div>

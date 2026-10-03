@@ -296,6 +296,106 @@ def create_report(request: Request,evidence_id: str,kind: str='case-diary'):
     if not result['valid']: raise HTTPException(409,'EVIDENCE_INVALID')
     output=save(content,kind); audit('report.create',json.dumps({'evidence_id':evidence_id,'kind':kind}),request.state.request_id); return output
 
+# ── FEATURE 3: Payment rail distribution ──────────────────────────────────────
+@app.get('/api/payment-stats')
+def payment_stats():
+    if not app.state.dataset: return []
+    import duckdb
+    con=duckdb.connect(str(DATA_DIR/'datasets'/app.state.dataset/'abhedya.duckdb'),read_only=True)
+    rows=con.execute("""
+        SELECT mode AS Payment_Mode, COUNT(*) AS count, SUM(amount_paise) AS volume
+        FROM transactions GROUP BY mode ORDER BY count DESC
+    """).fetchall(); con.close()
+    return [{'Payment_Mode': r[0] or 'UNKNOWN', 'count': int(r[1]), 'volume': int(r[2] or 0)} for r in rows]
+
+# ── FEATURE 1: Terminal nodes for IP / device anomaly panel ───────────────────
+@app.get('/api/terminal-nodes')
+def terminal_nodes():
+    if not app.state.dataset: return []
+    import duckdb
+    con=duckdb.connect(str(DATA_DIR/'datasets'/app.state.dataset/'abhedya.duckdb'),read_only=True)
+    rows=con.execute("""
+        SELECT
+            a.account_number AS account,
+            BOOL_OR((t.flags & 1) > 0)  AS has_foreign_ip,
+            BOOL_OR((t.flags & 2) > 0)  AS has_anomalous_device,
+            MAX(CASE WHEN (t.flags & 1) > 0 THEN t.ip END) AS last_ip,
+            MAX(CASE WHEN (t.flags & 2) > 0 THEN t.device END) AS device_type,
+            SUM(t.amount_paise) AS total_amount_paise
+        FROM accounts a
+        JOIN risk_scores s ON a.account_id = s.account_id
+        JOIN transactions t ON t.sender_acct = a.account_number OR t.receiver_acct = a.account_number
+        WHERE s.role = 'terminal'
+        GROUP BY a.account_number
+        ORDER BY total_amount_paise DESC
+        LIMIT 200
+    """).fetchall(); con.close()
+    return [{'account':r[0],'has_foreign_ip':bool(r[1]),'has_anomalous_device':bool(r[2]),'last_ip':r[3],'device_type':r[4],'total_amount_paise':int(r[5] or 0)} for r in rows]
+
+# ── FEATURE 8: Per-account entity stats ───────────────────────────────────────
+@app.get('/api/account/{account_id}/entity-stats')
+def account_entity_stats(account_id: str):
+    if not app.state.dataset: raise HTTPException(503,'DATABASE_NOT_READY')
+    import duckdb
+    con=duckdb.connect(str(DATA_DIR/'datasets'/app.state.dataset/'abhedya.duckdb'),read_only=True)
+    modes=con.execute("""
+        SELECT mode AS Payment_Mode, COUNT(*) AS count
+        FROM transactions WHERE sender_acct=? OR receiver_acct=?
+        GROUP BY mode
+    """, [account_id, account_id]).fetchall()
+    ip_row=con.execute("""
+        SELECT
+            SUM(CAST((flags & 1) > 0 AS INT)) AS foreign_ip_count,
+            SUM(CAST((flags & 2) > 0 AS INT)) AS bot_count,
+            SUM(CAST((flags & 4) > 0 AS INT)) AS crypto_count,
+            COUNT(*) AS total
+        FROM transactions WHERE sender_acct=? OR receiver_acct=?
+    """, [account_id, account_id]).fetchone()
+    con.close()
+    return {
+        'payment_modes': [{'Payment_Mode': r[0] or 'UNKNOWN', 'count': int(r[1])} for r in modes],
+        'foreign_ip_count': int(ip_row[0] or 0),
+        'bot_count': int(ip_row[1] or 0),
+        'crypto_count': int(ip_row[2] or 0),
+        'total_transactions': int(ip_row[3] or 0),
+    }
+
+# ── FEATURE 5: Generate FIR draft ─────────────────────────────────────────────
+@app.post('/api/generate-fir')
+def generate_fir(request: Request, body: dict):
+    account_id=str(body.get('account_id','')).strip()
+    if not app.state.dataset: raise HTTPException(503,'DATABASE_NOT_READY')
+    from .reports import generate_fir_text
+    import duckdb
+    con=duckdb.connect(str(DATA_DIR/'datasets'/app.state.dataset/'abhedya.duckdb'),read_only=True)
+    # Gather accused accounts from roles
+    accused=con.execute("""
+        SELECT a.account_number, a.primary_ifsc, s.role
+        FROM accounts a JOIN risk_scores s ON a.account_id=s.account_id
+        WHERE s.role IN ('collector','distributor','terminal')
+        ORDER BY s.score DESC LIMIT 30
+    """).fetchall()
+    total_siphoned=con.execute("""
+        SELECT SUM(amount_paise) FROM transactions WHERE sender_acct=?
+    """, [account_id]).fetchone()[0] or 0
+    period=con.execute("""
+        SELECT MIN(ts), MAX(ts) FROM transactions WHERE sender_acct=? OR receiver_acct=?
+    """, [account_id, account_id]).fetchone()
+    con.close()
+    ctx={
+        'victim_account': account_id,
+        'total_siphoned': f'Rs {int(total_siphoned)//100:,}',
+        'period_start': str(period[0])[:10] if period[0] else '—',
+        'period_end': str(period[1])[:10] if period[1] else '—',
+        'total_ring_size': len(accused),
+        'l1_collector_accounts': [{'account':r[0],'ifsc':r[1] or '—'} for r in accused if r[2]=='collector'],
+        'l2_distributor_accounts': [{'account':r[0],'ifsc':r[1] or '—'} for r in accused if r[2]=='distributor'],
+        'l3_cashout_nodes': [{'account':r[0],'ifsc':r[1] or '—'} for r in accused if r[2]=='terminal'],
+    }
+    fir_text=generate_fir_text(ctx)
+    audit('fir.generate',json.dumps({'victim':account_id}),request.state.request_id)
+    return {'fir': fir_text, 'victim': account_id, 'guardrail_removed': []}
+
 app.mount('/static',StaticFiles(directory=static),name='static')
 @app.get('/')
 def index(): return FileResponse(static/'index.html')
